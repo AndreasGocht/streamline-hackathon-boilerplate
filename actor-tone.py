@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import re
 import sys
@@ -19,9 +19,9 @@ for line in open(sys.argv[1]):
     finaltonesum += float(avgtone)
     finaltonecount += 1
 
-print "overall avgtone: %f" % (finaltonesum /finaltonecount) 
+print ("overall avgtone: %f" % (finaltonesum /finaltonecount) )
 
 for key, value in sorted(tonecount.items(),key=operator.itemgetter(1), reverse=True):
     if tonecount[key] > 20:
-        print "%s\t%f\t%d" % (key, tonesum[key] / tonecount[key], tonecount[key])
+        print ("%s\t%f\t%d" % (key, tonesum[key] / tonecount[key], tonecount[key]))
 
