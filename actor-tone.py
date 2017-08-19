@@ -30,13 +30,16 @@ with open(path) as f:
         if (finaltonecount > finaltonecount_max):
             break
 
-        if "yahoo" not in domain:
+        #if "yahoo" not in domain:
+            #continue
+        if actor is not "":
             continue
             
         tonesum[(domain,actor)] = tonesum.get((domain,actor),0)+ float(avgtone)
         tonecount[(domain,actor)] = tonecount.get((domain,actor), 0) + 1
 
 print ("overall avgtone: %f" % (finaltonesum /finaltonecount) )
+
 
 for key, value in sorted(tonecount.items(),key=operator.itemgetter(1), reverse=True):
     if tonecount[key] > 20:
