@@ -10,14 +10,31 @@ tonecount = {}
 finaltonesum = 0
 finaltonecount = 0
 
-for line in open(sys.argv[1]):
-    items = line.split('\t')
-    actor = items[5]
-    avgtone = items[34]
-    tonesum[actor] = tonesum.get(actor,0)+ float(avgtone)
-    tonecount[actor] = tonecount.get(actor, 0) + 1
-    finaltonesum += float(avgtone)
-    finaltonecount += 1
+path = sys.argv[1]
+finaltonecount_max = int(sys.argv[2])
+
+
+with open(path) as f:
+    for line in f:
+        items = line.split('\t')
+        actor = items[5]
+        avgtone = items[34]
+        url = items[-1]
+        m = re.match(r'[^/]*://([^/]*)/',url)
+        domain = "unkonwn"
+        if m:
+            domain = m.group(1)
+ 
+        finaltonesum += float(avgtone)
+        finaltonecount += 1
+        if (finaltonecount > finaltonecount_max):
+            break
+
+        if "yahoo" not in domain:
+            continue
+            
+        tonesum[(domain,actor)] = tonesum.get((domain,actor),0)+ float(avgtone)
+        tonecount[(domain,actor)] = tonecount.get((domain,actor), 0) + 1
 
 print ("overall avgtone: %f" % (finaltonesum /finaltonecount) )
 
