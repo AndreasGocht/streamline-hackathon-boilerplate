@@ -30,25 +30,35 @@ import java.util.Arrays;
  * @author behrouz
  */
 public class SparkJavaJob {
-    private static class AvgToneCountPair implements java.io.Serializable {
-      public Double avgTone = 0.0;
-      public Integer count = 0;
+    private static class AvgToneCountDualPair implements java.io.Serializable {
+      public Double totalAvgTone = 0.0;
+      public Integer totalCount = 0;
+      public Double windowAvgTone = 0.0;
+      public Integer windowCount = 0;
 
-      public AvgToneCountPair(final Double avgTone,final Integer count) {
-        this.avgTone = avgTone;
-        this.count = count;
+      public AvgToneCountDualPair(final Double totalAvgTone,final Integer totalCount, final Double windowAvgTone, final Integer windowCount) {
+        this.totalAvgTone = totalAvgTone;
+        this.totalCount = totalCount;
+        this.windowAvgTone = windowAvgTone;
+        this.windowCount = windowCount;
       }
 
-      public Double getAvgTone() { return avgTone; }
-      public void setAvgTone(final Double avgTone) { this.avgTone = avgTone; }
-      public Integer getCount() { return count; }
-      public void setCount(final Integer count) { this.count = count; }
+      public Double getTotalAvgTone() { return totalAvgTone; }
+      public void setTotalAvgTone(final Double totalAvgTone) { this.totalAvgTone = totalAvgTone; }
+      public Integer getTotalCount() { return totalCount; }
+      public void setTotalCount(final Integer totalCount) { this.totalCount = totalCount; }
+      public Double getWindowAvgTone() { return windowAvgTone; }
+      public void setWindowAvgTone(final Double windowAvgTone) { this.windowAvgTone = windowAvgTone; }
+      public Integer getWindowCount() { return windowCount; }
+      public void setWindowCount(final Integer windowCount) { this.windowCount = windowCount; }
 
       @Override
       public String toString() {
         return "(" +
-          "avgTone: " + Double.toString(avgTone) +
-          ", count: " + Integer.toString(count) +
+          "totalAvgTone: " + Double.toString(totalAvgTone) +
+          ", totalCount: " + Integer.toString(totalCount) +
+          ", windowAvgTone: " + Double.toString(windowAvgTone) +
+          ", windowCount: " + Integer.toString(windowCount) +
           ")";
       }
     }
@@ -73,15 +83,15 @@ public class SparkJavaJob {
 
         // function to store intermediate values in the state
         // it is called in the mapWithState function of DStream
-        Function3<String, Optional<AvgToneCountPair>, State<AvgToneCountPair>, Tuple2<String, AvgToneCountPair>> mappingFunc =
-                new Function3<String, Optional<AvgToneCountPair>, State<AvgToneCountPair>, Tuple2<String, AvgToneCountPair>>() {
+        Function3<String, Optional<AvgToneCountDualPair>, State<AvgToneCountDualPair>, Tuple2<String, AvgToneCountDualPair>> mappingFunc =
+                new Function3<String, Optional<AvgToneCountDualPair>, State<AvgToneCountDualPair>, Tuple2<String, AvgToneCountDualPair>>() {
                     @Override
-                    public Tuple2<String, AvgToneCountPair> call(String country, Optional<AvgToneCountPair> avg, State<AvgToneCountPair> state) throws Exception {
-                        Double tone = avg.orElse(new AvgToneCountPair(0.0, 0)).getAvgTone() + (state.exists() ? state.get().getAvgTone() : 0.0);
-                        Integer count = avg.orElse(new AvgToneCountPair(0.0, 0)).getCount() + (state.exists() ? state.get().getCount() : 0);
+                    public Tuple2<String, AvgToneCountDualPair> call(String country, Optional<AvgToneCountDualPair> avg, State<AvgToneCountDualPair> state) throws Exception {
+                        Double totalTone = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0)).getTotalAvgTone() + (state.exists() ? state.get().getTotalAvgTone() : 0.0);
+                        Integer totalCount = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0)).getTotalCount() + (state.exists() ? state.get().getTotalCount() : 0);
 
-                        AvgToneCountPair temp = new AvgToneCountPair(tone, count);
-                        Tuple2<String, AvgToneCountPair> output = new Tuple2<>(country, temp);
+                        AvgToneCountDualPair temp = new AvgToneCountDualPair(totalTone, totalCount, avg.get().getWindowAvgTone(), avg.get().getWindowCount());
+                        Tuple2<String, AvgToneCountDualPair> output = new Tuple2<>(country, temp);
                         state.update(temp);
 
                         return output;
@@ -96,29 +106,33 @@ public class SparkJavaJob {
                   return countries.contains(gdeltEvent.actor1Code_code);
               }
           })
-          .mapToPair(new PairFunction<GDELTEvent, String, AvgToneCountPair>() {
+          .mapToPair(new PairFunction<GDELTEvent, String, AvgToneCountDualPair>() {
               @Override
-              public Tuple2<String, AvgToneCountPair> call(GDELTEvent gdeltEvent) throws Exception {
-                  return new Tuple2<>(gdeltEvent.actor1Code_countryCode, new AvgToneCountPair(gdeltEvent.avgTone, 1));
+              public Tuple2<String, AvgToneCountDualPair> call(GDELTEvent gdeltEvent) throws Exception {
+                  return new Tuple2<>(gdeltEvent.actor1Code_countryCode, new AvgToneCountDualPair(gdeltEvent.avgTone, 1, gdeltEvent.avgTone, 1));
               }
           })
-          .reduceByKey(new Function2<AvgToneCountPair, AvgToneCountPair, AvgToneCountPair>() {
+          .reduceByKey(new Function2<AvgToneCountDualPair, AvgToneCountDualPair, AvgToneCountDualPair>() {
               @Override
-              public AvgToneCountPair call(AvgToneCountPair first, AvgToneCountPair second) throws Exception {
-                return new AvgToneCountPair(first.getAvgTone() + second.getAvgTone(), first.getCount() + second.getCount());
+              public AvgToneCountDualPair call(AvgToneCountDualPair first, AvgToneCountDualPair second) throws Exception {
+                return new AvgToneCountDualPair(
+                  first.getTotalAvgTone() + second.getTotalAvgTone(),
+                  first.getTotalCount() + second.getTotalCount(),
+                  first.getWindowAvgTone() + second.getWindowAvgTone(),
+                  first.getWindowCount() + second.getWindowCount());
               }
           })
           .mapWithState(StateSpec.function (mappingFunc))
-          .mapToPair(new PairFunction<Tuple2<String, AvgToneCountPair>, String, Double>() {
+          .mapToPair(new PairFunction<Tuple2<String, AvgToneCountDualPair>, String, Tuple2<Double, Double>>() {
             @Override
-            public Tuple2<String, Double> call(Tuple2<String, AvgToneCountPair> f) throws Exception {
-              return new Tuple2<>(f._1, f._2.getAvgTone() / f._2.getCount());
+            public Tuple2<String, Tuple2<Double, Double>> call(Tuple2<String, AvgToneCountDualPair> f) throws Exception {
+              return new Tuple2<>(f._1, new Tuple2<Double, Double>(f._2.getTotalAvgTone() / f._2.getTotalCount(), f._2.getWindowAvgTone() / f._2.getWindowCount()));
             }
           })
-          .map(new Function<Tuple2<String, Double>, String>() {
+          .map(new Function<Tuple2<String, Tuple2<Double, Double>>, String>() {
               @Override
-              public String call(Tuple2<String, Double> event) throws Exception {
-                  return  event._1 + "," + event._2;
+              public String call(Tuple2<String, Tuple2<Double, Double>> event) throws Exception {
+                  return  event._1 + "," + event._2._1 + "," + event._2._2;
 
               }
           })
