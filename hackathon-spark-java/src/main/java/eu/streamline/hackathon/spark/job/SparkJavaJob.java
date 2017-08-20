@@ -146,8 +146,8 @@ public class SparkJavaJob {
 
               }
           })
-          //.dstream().saveAsTextFiles(pathToTmp, "");
-          .print();
+          .dstream().saveAsTextFiles(pathToTmp, "");
+          //.print();
 
         jssc.start();
         jssc.awaitTermination();
