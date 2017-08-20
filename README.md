@@ -1,3 +1,34 @@
+# Stream Line hackaton Avg Prediction
+
+This repository contains our stuff from the hackaton.
+
+## How to use:
+
+### Java Job
+
+```
+/path/to/spark/root/bin/spark-submit \
+--master spark://<host>:<port> \
+--class eu.streamline.hackathon.spark.job.SparkJavaJob \
+ hackathon-spark-java/target/hackathon-spark-java-0.1-SNAPSHOT.jar \
+--path /path/to/data/180-days.csv \
+--micro-batch-duration 5000
+--countries "USA RUS ESP DEU AUT"
+--newspapers "www.cnn.com www.globaltimes.cn"
+--tmpdir /tmp/data/data
+```
+
+### Python visualisation
+
+```
+cd python_code
+python3 plot_data.py --path /tmp/data/
+```
+
+### Stuff around
+
+For the whole toolchaine please have a look below to the spark section.
+
 # Streamline Hackathon Boilerplate for GDELT 1.0 Event Database
 
 This repository contains boilerplate Java/Scala code for Apache Flink and Apache Spark which parse and stream GDELT 1.0 Event Database [1]. It further includes simple aggregation examples on the data.
