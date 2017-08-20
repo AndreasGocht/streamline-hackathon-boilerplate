@@ -72,6 +72,18 @@ public class SparkJavaJob {
       }
     }
 
+    public static String domainFromSourceUrl(String sourceUrl) {
+      Pattern r = Pattern.compile("[^/]*://([^/]*)/");
+      Matcher m = r.matcher(sourceUrl);
+
+      String domain = "unknown";
+      if (m.find()) {
+        domain = m.group(1);
+      }
+
+      return domain;
+    }
+
     public static void main(String[] args) throws InterruptedException {
 
         ParameterTool params = ParameterTool.fromArgs(args);
@@ -79,8 +91,13 @@ public class SparkJavaJob {
         final String pathToTmp = params.getRequired("tmpdir");
         final Long duration = params.getLong("micro-batch-duration", 1000);
         final String countries_str = params.get("countries", "USA RUS DEU AUT ESP CHN FRA");
+        final String newspapers_str = params.get("newspapers", null);
 
         final List<String> countries = Arrays.asList(countries_str.split("\\s+"));
+
+        final List<String> newspapers = newspapers_str != null ?
+          Arrays.asList(newspapers_str.split("\\s+")) :
+          null;
 
         SparkConf conf = new SparkConf().setAppName("Spark Java GDELT Analyzer");
         String masterURL = conf.get("spark.master", "local[*]");
@@ -117,21 +134,14 @@ public class SparkJavaJob {
           .filter(new Function<GDELTEvent, Boolean>() {
               @Override
               public Boolean call(GDELTEvent gdeltEvent) throws Exception {
-                  return countries.contains(gdeltEvent.actor1Code_code);
+                  return countries.contains(gdeltEvent.actor1Code_countryCode) &&
+                    (newspapers != null ? newspapers.contains(domainFromSourceUrl(gdeltEvent.sourceUrl)) : true);
               }
           })
           .mapToPair(new PairFunction<GDELTEvent, Tuple2<String, String>, AvgToneCountDualPair>() {
               @Override
               public Tuple2<Tuple2<String, String>, AvgToneCountDualPair> call(GDELTEvent gdeltEvent) throws Exception {
-                  Pattern r = Pattern.compile("[^/]*://([^/]*)/");
-                  Matcher m = r.matcher(gdeltEvent.sourceUrl);
-
-                  String domain = "unknown";
-                  if (m.find()) {
-                    domain = m.group(1);
-                  }
-
-                  return new Tuple2<>(new Tuple2<>(gdeltEvent.actor1Code_countryCode, domain), new AvgToneCountDualPair(gdeltEvent.avgTone, 1, gdeltEvent.avgTone, 1, 0.0));
+                  return new Tuple2<>(new Tuple2<>(gdeltEvent.actor1Code_countryCode, domainFromSourceUrl(gdeltEvent.sourceUrl)), new AvgToneCountDualPair(gdeltEvent.avgTone, 1, gdeltEvent.avgTone, 1, 0.0));
               }
           })
           .reduceByKey(new Function2<AvgToneCountDualPair, AvgToneCountDualPair, AvgToneCountDualPair>() {
@@ -159,8 +169,8 @@ public class SparkJavaJob {
 
               }
           })
-          .dstream().saveAsTextFiles(pathToTmp, "");
-          //.print();
+          //.dstream().saveAsTextFiles(pathToTmp, "");
+          .print();
 
         jssc.start();
         jssc.awaitTermination();
