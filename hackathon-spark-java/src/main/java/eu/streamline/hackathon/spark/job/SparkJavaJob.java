@@ -113,16 +113,29 @@ public class SparkJavaJob {
                 new Function3<Tuple2<String, String>, Optional<AvgToneCountDualPair>, State<AvgToneCountDualPair>, Tuple2<Tuple2<String, String>, AvgToneCountDualPair>>() {
                     @Override
                     public Tuple2<Tuple2<String, String>, AvgToneCountDualPair> call(Tuple2<String, String> keyPair, Optional<AvgToneCountDualPair> avg, State<AvgToneCountDualPair> state) throws Exception {
-                        Double totalTone = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0, 0.0)).getTotalAvgTone() + (state.exists() ? state.get().getTotalAvgTone() : 0.0);
-                        Integer totalCount = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0, 0.0)).getTotalCount() + (state.exists() ? state.get().getTotalCount() : 0);
                         
-                        Double error = totalTone/totalCount - avg.get().getWindowAvgTone()/avg.get().getWindowCount();
+                    	
+                    	Double totalTone = state.exists() ? state.get().getTotalAvgTone() : 0.0;
+                    	Integer totalCount = state.exists() ? state.get().getTotalCount() : 0;
+                    	
+                    	Double error = 0.0;
+                    	
+                    	if (totalCount == 0)
+                    	{
+                    		error = 0 - avg.get().getWindowAvgTone()/avg.get().getWindowCount();
+                    	}else
+                    	{
+                    		error = totalTone/totalCount - avg.get().getWindowAvgTone()/avg.get().getWindowCount();	
+                    	}
+                    	
+                    	totalTone = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0, 0.0)).getTotalAvgTone() + totalTone;
+                        totalCount = avg.orElse(new AvgToneCountDualPair(0.0, 0, 0.0, 0, 0.0)).getTotalCount() + totalCount;
+                        
+                        //Double error = totalTone/totalCount - avg.get().getWindowAvgTone()/avg.get().getWindowCount();
                         
                         AvgToneCountDualPair temp = new AvgToneCountDualPair(totalTone, totalCount, avg.get().getWindowAvgTone(), avg.get().getWindowCount(), error);
                         Tuple2<Tuple2<String, String>, AvgToneCountDualPair> output = new Tuple2<>(keyPair, temp);
-                        
-                        
-                        
+                                               
                         state.update(temp);
 
                         return output;
@@ -169,8 +182,8 @@ public class SparkJavaJob {
 
               }
           })
-          //.dstream().saveAsTextFiles(pathToTmp, "");
-          .print();
+          .dstream().saveAsTextFiles(pathToTmp, "");
+          //.print();
 
         jssc.start();
         jssc.awaitTermination();
