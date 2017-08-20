@@ -9,6 +9,7 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.Function3;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Minutes;
 import org.apache.spark.streaming.State;
@@ -21,18 +22,51 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Objects;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * @author behrouz
  */
 public class SparkJavaJob {
+    private static class AvgToneCountPair implements java.io.Serializable {
+      public Double avgTone = 0.0;
+      public Integer count = 0;
+
+      public AvgToneCountPair(final Double avgTone,final Integer count) {
+        this.avgTone = avgTone;
+        this.count = count;
+      }
+
+      public Double getAvgTone() { return avgTone; }
+      public void setAvgTone(final Double avgTone) { this.avgTone = avgTone; }
+      public Integer getCount() { return count; }
+      public void setCount(final Integer count) { this.count = count; }
+
+      @Override
+      public String toString() {
+        return "(" +
+          "avgTone: " + Double.toString(avgTone) +
+          ", count: " + Integer.toString(count) +
+          ")";
+      }
+    }
 
     public static void main(String[] args) throws InterruptedException {
 
         ParameterTool params = ParameterTool.fromArgs(args);
         final String pathToGDELT = params.get("path");
         final Long duration = params.getLong("micro-batch-duration", 1000);
-        final String country = params.get("country", "USA");
+        //final String country = params.get("country", "USA");
+        final Set<String> countries = new HashSet<String>();
+
+        countries.add("USA");
+        countries.add("RUS");
+        countries.add("DEU");
+        countries.add("AUT");
+        countries.add("ESP");
+        countries.add("CHN");
+        countries.add("FRA");
 
         SparkConf conf = new SparkConf().setAppName("Spark Java GDELT Analyzer");
         String masterURL = conf.get("spark.master", "local[*]");
@@ -44,17 +78,17 @@ public class SparkJavaJob {
 
         // function to store intermediate values in the state
         // it is called in the mapWithState function of DStream
-        Function3<String, Optional<Tuple2<Double, Integer>>, State<Tuple2<Double, Integer>>, Tuple2<String, Tuple2<Double, Integer>>> mappingFunc =
-                new Function3<String, Optional<Tuple2<Double, Integer>>, State<Tuple2<Double, Integer>>, Tuple2<String, Tuple2<Double, Integer>>>() {
+        Function3<String, Optional<AvgToneCountPair>, State<AvgToneCountPair>, Tuple2<String, AvgToneCountPair>> mappingFunc =
+                new Function3<String, Optional<AvgToneCountPair>, State<AvgToneCountPair>, Tuple2<String, AvgToneCountPair>>() {
                     @Override
-                    public Tuple2<String, Tuple2<Double, Integer>> call(String country, Optional<Tuple2<Double, Integer>> avg, State<Tuple2<Double, Integer>> state) throws Exception {
-                        Double tone = avg.orElse(new Tuple2<Double, Integer>(0.0, 0))._1 + (state.exists() ? state.get()._1 : 0.0);
-                        Integer count = avg.orElse(new Tuple2<Double, Integer>(0.0, 0))._2 + (state.exists() ? state.get()._2 : 0);
+                    public Tuple2<String, AvgToneCountPair> call(String country, Optional<AvgToneCountPair> avg, State<AvgToneCountPair> state) throws Exception {
+                        Double tone = avg.orElse(new AvgToneCountPair(0.0, 0)).getAvgTone() + (state.exists() ? state.get().getAvgTone() : 0.0);
+                        Integer count = avg.orElse(new AvgToneCountPair(0.0, 0)).getCount() + (state.exists() ? state.get().getCount() : 0);
 
-                        Tuple2<Double, Integer> temp = new Tuple2<Double, Integer>(tone, count);
-
-                        Tuple2<String, Tuple2<Double, Integer>> output = new Tuple2<>(country, temp);
+                        AvgToneCountPair temp = new AvgToneCountPair(tone, count);
+                        Tuple2<String, AvgToneCountPair> output = new Tuple2<>(country, temp);
                         state.update(temp);
+
                         return output;
                     }
         };
@@ -64,38 +98,37 @@ public class SparkJavaJob {
           .filter(new Function<GDELTEvent, Boolean>() {
               @Override
               public Boolean call(GDELTEvent gdeltEvent) throws Exception {
-                  return Objects.equals(gdeltEvent.actor1Code_code, country);
+                  return countries.contains(gdeltEvent.actor1Code_code);
               }
           })
-          .mapToPair(new PairFunction<GDELTEvent, String, Tuple2<Double, Integer>>() {
+          .mapToPair(new PairFunction<GDELTEvent, String, AvgToneCountPair>() {
               @Override
-              public Tuple2<String, Tuple2<Double, Integer>> call(GDELTEvent gdeltEvent) throws Exception {
-                  return new Tuple2<>(gdeltEvent.actor1Code_code, new Tuple2<>(gdeltEvent.avgTone, 1));
+              public Tuple2<String, AvgToneCountPair> call(GDELTEvent gdeltEvent) throws Exception {
+                  return new Tuple2<>(gdeltEvent.actor1Code_countryCode, new AvgToneCountPair(gdeltEvent.avgTone, 1));
               }
           })
-          .reduceByKey(new Function2<Tuple2<Double, Integer>, Tuple2<Double, Integer>, Tuple2<Double, Integer>>() {
+          .reduceByKey(new Function2<AvgToneCountPair, AvgToneCountPair, AvgToneCountPair>() {
               @Override
-              public Tuple2<Double, Integer> call(Tuple2<Double, Integer> first, Tuple2<Double, Integer> second) throws Exception {
-                return new Tuple2<>(first._1 + second._1, first._2 + second._2);
+              public AvgToneCountPair call(AvgToneCountPair first, AvgToneCountPair second) throws Exception {
+                return new AvgToneCountPair(first.getAvgTone() + second.getAvgTone(), first.getCount() + second.getCount());
               }
           })
           .mapWithState(StateSpec.function (mappingFunc))
-          .mapToPair(new PairFunction<Tuple2<String, Tuple2<Double, Integer>>, String, Double>() {
+          .mapToPair(new PairFunction<Tuple2<String, AvgToneCountPair>, String, Double>() {
             @Override
-            public Tuple2<String, Double> call(Tuple2<String, Tuple2<Double, Integer>> f) throws Exception {
-              return new Tuple2(f._1, f._2._1 / f._2._2);
+            public Tuple2<String, Double> call(Tuple2<String, AvgToneCountPair> f) throws Exception {
+              return new Tuple2<>(f._1, f._2.getAvgTone() / f._2.getCount());
             }
           })
-          /*.map(new Function<Tuple2<Date, Double>, String>() {
+          .map(new Function<Tuple2<String, Double>, String>() {
               @Override
-              public String call(Tuple2<Date, Double> event) throws Exception {
-                  DateFormat format = new SimpleDateFormat("yyyy-MM-dd");
-                  return "Country(" + country + "), Week(" + format.format(event._1()) + "), " +
-                          "AvgTone(" + event._2() + ")";
+              public String call(Tuple2<String, Double> event) throws Exception {
+                  return  event._1 + "," + event._2;
 
               }
-          })*/
-          .dstream().saveAsTextFiles("/scratch/dkocher/big-data-summer-school/tmp/data", "txt");
+          })
+          //.dstream().saveAsTextFiles("/scratch/dkocher/big-data-summer-school/tmp/data", "");
+          .print();
 
         jssc.start();
         jssc.awaitTermination();
