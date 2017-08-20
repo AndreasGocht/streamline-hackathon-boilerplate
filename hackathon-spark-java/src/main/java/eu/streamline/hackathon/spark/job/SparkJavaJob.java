@@ -22,8 +22,9 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Objects;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * @author behrouz
@@ -56,17 +57,11 @@ public class SparkJavaJob {
 
         ParameterTool params = ParameterTool.fromArgs(args);
         final String pathToGDELT = params.get("path");
+        final String pathToTmp = params.getRequired("tmpdir");
         final Long duration = params.getLong("micro-batch-duration", 1000);
-        //final String country = params.get("country", "USA");
-        final Set<String> countries = new HashSet<String>();
+        final String countries_str = params.get("countries", "USA RUS DEU AUT ESP CHN FRA");
 
-        countries.add("USA");
-        countries.add("RUS");
-        countries.add("DEU");
-        countries.add("AUT");
-        countries.add("ESP");
-        countries.add("CHN");
-        countries.add("FRA");
+        final List<String> countries = Arrays.asList(countries_str.split("\\s+"));
 
         SparkConf conf = new SparkConf().setAppName("Spark Java GDELT Analyzer");
         String masterURL = conf.get("spark.master", "local[*]");
@@ -127,8 +122,8 @@ public class SparkJavaJob {
 
               }
           })
-          //.dstream().saveAsTextFiles("/scratch/dkocher/big-data-summer-school/tmp/data", "");
-          .print();
+          .dstream().saveAsTextFiles(pathToTmp, "");
+          //.print();
 
         jssc.start();
         jssc.awaitTermination();
