@@ -2,6 +2,12 @@
 
 This repository contains our stuff from the hackaton.
 
+We are:
+* Daniel Kocher
+* Willi Mann
+* Alejandro Montero Rivero
+* Andreas Gocht
+
 ## How to use:
 
 ### Java Job
@@ -17,6 +23,8 @@ This repository contains our stuff from the hackaton.
 --newspapers "www.cnn.com www.globaltimes.cn"
 --tmpdir /tmp/data/data
 ```
+
+If `--newspapers` is not present, all newspapers are respected. 
 
 ### Python visualisation
 
